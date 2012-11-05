@@ -89,7 +89,7 @@ def build_xoauth_string(url, consumer, token=None):
     params = []
     for k, v in sorted(request.items()):
         if v is not None:
-            params.append('%s="%s"' % (k, escape(v)))
+            params.append('%s="%s"' % (k, escape(str(v))))
 
     return "%s %s %s" % ("GET", url, ','.join(params))
 
@@ -490,7 +490,7 @@ class Request(dict):
             # section 4.1.1 "OAuth Consumers MUST NOT include an
             # oauth_body_hash parameter on requests with form-encoded
             # request bodies."
-            self['oauth_body_hash'] = base64.b64encode(sha(self.body).digest())
+            self['oauth_body_hash'] = str(base64.b64encode(sha(self.body.encode()).digest()).decode())
 
         if 'oauth_consumer_key' not in self:
             self['oauth_consumer_key'] = consumer.key
@@ -499,7 +499,17 @@ class Request(dict):
             self['oauth_token'] = token.key
 
         self['oauth_signature_method'] = signature_method.name
-        self['oauth_signature'] = signature_method.sign(self, consumer, token)
+        oauth_signature = signature_method.sign(self, consumer, token)
+        #print("type of 'oauth_signature': "+str(type(oauth_signature)))
+        if str(type(oauth_signature)) == "<class 'bytes'>":
+            oauth_signature = oauth_signature.decode()
+            #print("'oauth_signature: "+oauth_signature)
+        else:
+            oauth_signature = oauth_signature
+            #print("'oauth_signature: "+oauth_signature)
+#            oauth_signature = oauth_signature
+#            print("'oauth_signature2:"+oauth_signature)
+        self['oauth_signature'] = oauth_signature
  
     @classmethod
     def make_timestamp(cls):
@@ -606,7 +616,7 @@ class Request(dict):
     @staticmethod
     def _split_url_string(param_str):
         """Turn URL string into parameters."""
-        parameters = parse_qs(param_str.encode('utf-8'), keep_blank_values=True)
+        parameters = parse_qs(param_str, keep_blank_values=True)
         for k, v in parameters.items():
             parameters[k] = urllib.parse.unquote(v[0])
         return parameters
@@ -837,10 +847,21 @@ class SignatureMethod_HMAC_SHA1(SignatureMethod):
         """Builds the base signature string."""
         key, raw = self.signing_base(request, consumer, token)
 
-        hashed = hmac.new(key, raw, sha)
+        #print("type of 'key': "+str(type(key)))
+        #print("type of 'key.encode('utf-8')': "+str(type(key.encode('utf-8'))))
+        #print("type of 'raw': "+str(type(raw)))
+        #print("type of 'raw.encode('utf-8')': "+str(type(raw.encode('utf-8'))))
+
+        hashed = hmac.new(key.encode(), raw.encode(), sha)
+        #print(str(hashed))
+        #hashed = hmac.new(bytes(key), bytes(raw), sha)
 
         # Calculate the digest base 64.
-        return binascii.b2a_base64(hashed.digest())[:-1]
+        digestbase64 = binascii.b2a_base64(hashed.digest())[:-1]
+        #print("type of 'digestbase64': "+str(type(digestbase64)))
+        #print(digestbase64.decode())
+        
+        return digestbase64
 
 
 class SignatureMethod_PLAINTEXT(SignatureMethod):
